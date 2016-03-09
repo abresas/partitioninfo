@@ -60,7 +60,7 @@ exports.parse = (mbrBuffer) ->
 #	bootRecord.getExtended('path/to/rpi.img', 2048).then (ebr) ->
 #		console.log(ebr)
 ###
-exports.getExtended = (image, position) ->
+exports.getExtended = getExtended = (image, position) ->
 	exports.read(image, position).then (buffer) ->
 		try
 			result = exports.parse(buffer)
@@ -81,5 +81,27 @@ exports.getExtended = (image, position) ->
 #	bootRecord.getMaster('path/to/rpi.img').then (mbr) ->
 #		console.log(mbr)
 ###
-exports.getMaster = (image) ->
+exports.getMaster = getMaster = (image) ->
 	exports.read(image, 0).then(exports.parse)
+
+exports.getAll = (path, offset) ->
+	Promise.try ->
+		if not offset
+			getMaster(path)
+		else
+			getExtended(path, offset)
+	.get('partitions')
+	.filter (partition) ->
+		partition.type != 0
+	.map (partition, i) ->
+		if partition.type == 5
+			getAll(path, partition.firstLBA * 512)
+			.then (parts) ->
+				return [ partition ].concat(parts)
+			.catch ->
+				# there was no ext partition there
+				return [ partition ]
+		else
+			return [ partition ]
+	.then (parts) ->
+		[].concat(parts...) # flatten
